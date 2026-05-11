@@ -8,6 +8,7 @@
 import math  # Math Operations
 import random # For random properties
 import maya.cmds as cmds 
+from dataclasses import dataclass
 
 from maya import OpenMayaUI as omui 
 
@@ -24,6 +25,171 @@ except ImportError:
 WINDOW_OBJECT_NAME = "ScatterTool"
 WINDOW_TITLE = "Scatter Tool for Maya"
 ROOT_GROUP_NAME = "ScatterTool_grp"
+
+
+# Scatter Logic Support
+# *******************************************
+
+# Default values, using a container class 
+@dataclass
+class ScatterSettings:
+    target_mesh: str
+    source_objects: list[str]
+    source_weights: list[float]
+    count: int = 50
+    min_spacing: float = 0.5
+    seed: int = 12345
+    scale_min: float = 0.8
+    scale_max: float = 1.3
+    rotate_y_min: float = 0.0
+    rotate_y_max: float = 360.0
+    tilt_x_min: float = -5.0
+    tilt_x_max: float = 5.0
+    tilt_z_min: float = -5.0
+    tilt_z_max: float = 5.0
+    align_to_normals: bool = False
+    use_instances: bool = True
+    group_results: bool = True
+    group_name: str = "Scatter_Grp"
+    max_attempts_multiplier: int = 30
+
+# Main scatter operations used by the UI.
+class ScatterToolLogic:
+    def __init__(self):
+        self.last_group = None
+    
+    # Create scattered objects and return their node names
+    def scatter(self, settings: ScatterSettings) -> list[str]:
+        self._validate_settings(settings)
+        random.seed(settings.seed)
+
+        accepted_points: list[tuple[float, float, float]] = []
+        created_objects: list[str] = []
+
+        group = None
+        if settings.group_results:
+            group = cmds.group(empty=True, name=unique_name(settings.group_name))
+            self.last_group = group
+
+        bbox = cmds.exactWorldBoundingBox(settings.target_mesh)
+        max_attempts = max(settings.count * settings.max_attempts_multiplier, settings.count)
+        attempts = 0
+
+        while len(created_objects) < settings.count and attempts < max_attempts:
+            attempts += 1
+
+            point = self._random_point_on_bbox_top_projection(settings.target_mesh, bbox)
+            if point is None:
+                continue
+
+            if not self._passes_spacing(point, accepted_points, settings.min_spacing):
+                continue
+
+            source = choose_weighted_object(settings.source_objects, settings.source_weights)
+            new_obj = self._create_scatter_object(source, settings.use_instances)
+
+            cmds.xform(new_obj, worldSpace=True, translation=point)
+
+            scale = random_float(settings.scale_min, settings.scale_max)
+            cmds.scale(scale, scale, scale, new_obj, absolute=True)
+
+            rx = random_float(settings.tilt_x_min, settings.tilt_x_max)
+            ry = random_float(settings.rotate_y_min, settings.rotate_y_max)
+            rz = random_float(settings.tilt_z_min, settings.tilt_z_max)
+            cmds.rotate(rx, ry, rz, new_obj, absolute=True, worldSpace=True)
+
+            if settings.align_to_normals:
+                # Starter behavior: keep Y random rotation, then try a simple normal alignment.
+                # You can upgrade this with maya.api.OpenMaya later.
+                self._try_align_to_surface_normal(new_obj, settings.target_mesh, point, ry)
+
+            if group:
+                cmds.parent(new_obj, group)
+
+            accepted_points.append(point)
+            created_objects.append(new_obj)
+
+        if created_objects:
+            cmds.select(created_objects, replace=True)
+        else:
+            cmds.warning("No scatter objects were created. Try lowering spacing or increasing count.")
+
+        return created_objects
+
+    # Delete the last scatter group created by this logic instance.
+    def clear_last_scatter(self):
+        if self.last_group and cmds.objExists(self.last_group):
+            cmds.delete(self.last_group)
+            self.last_group = None
+        else:
+            cmds.warning("No previous scatter group found from this session.")
+
+    def _validate_settings(self, settings: ScatterSettings) -> None:
+        if not is_valid_mesh_transform(settings.target_mesh):
+            raise ValueError("Target mesh is invalid or missing.")
+        if not settings.source_objects:
+            raise ValueError("Add at least one source object.")
+        for obj in settings.source_objects:
+            if not cmds.objExists(obj):
+                raise ValueError(f"Source object does not exist: {obj}")
+        if settings.count <= 0:
+            raise ValueError("Count must be greater than zero.")
+
+    def _create_scatter_object(self, source: str, use_instance: bool) -> str:
+        base = source.split("|")[-1]
+        name = unique_name(f"{base}_scatter")
+        if use_instance:
+            result = cmds.instance(source, name=name)
+        else:
+            result = cmds.duplicate(source, name=name)
+        return result[0]
+
+    def _passes_spacing(self, point, accepted_points, min_spacing: float) -> bool:
+        if min_spacing <= 0:
+            return True
+        for old_point in accepted_points:
+            if distance_between_points(point, old_point) < min_spacing:
+                return False
+        return True
+
+    # Starter placement method.
+    def _random_point_on_bbox_top_projection(self, target_mesh: str, bbox: list[float]) -> tuple[float, float, float] | None:
+        min_x, min_y, min_z, max_x, max_y, max_z = bbox
+        x = random.uniform(min_x, max_x)
+        z = random.uniform(min_z, max_z)
+        y = max_y + 10.0
+
+        # Simple fallback: place on top bbox height.
+        fallback = (x, max_y, z)
+
+        try:
+            shape = cmds.listRelatives(target_mesh, shapes=True, fullPath=True)[0]
+            cpm = cmds.createNode("closestPointOnMesh")
+            cmds.connectAttr(shape + ".worldMesh[0]", cpm + ".inMesh", force=True)
+            cmds.setAttr(cpm + ".inPosition", x, y, z, type="double3")
+            px, py, pz = cmds.getAttr(cpm + ".position")[0]
+            cmds.delete(cpm)
+            return (px, py, pz)
+        except Exception:
+            return fallback
+    # Basic placeholder for normal alignment.
+    def _try_align_to_surface_normal(self, obj: str, target_mesh: str, point, original_y_rotation: float) -> None:
+        try:
+            shape = cmds.listRelatives(target_mesh, shapes=True, fullPath=True)[0]
+            cpm = cmds.createNode("closestPointOnMesh")
+            cmds.connectAttr(shape + ".worldMesh[0]", cpm + ".inMesh", force=True)
+            cmds.setAttr(cpm + ".inPosition", point[0], point[1], point[2], type="double3")
+            nx, ny, nz = cmds.getAttr(cpm + ".normal")[0]
+            cmds.delete(cpm)
+
+            # Approximate: convert normal direction to simple pitch/roll.
+            # This is not perfect, but gives a visual starting point.
+            import math
+            pitch = math.degrees(math.atan2(nz, ny))
+            roll = -math.degrees(math.atan2(nx, ny))
+            cmds.rotate(pitch, original_y_rotation, roll, obj, absolute=True, worldSpace=True)
+        except Exception:
+            pass
 
 
 # Collections of back-end routines
@@ -115,7 +281,7 @@ class ScatterToolUI(QtWidgets.QDialog):
         self.setMinimumWidth(460)
         self.setMinimumHeight(1250)
 
-        #self.logic = ScatterToolLogic()
+        self.logic = ScatterToolLogic()
         self.source_rows = [] # a table that host the objects to scatter
         self._build_ui()
         self._connect_signals()
@@ -317,7 +483,7 @@ class ScatterToolUI(QtWidgets.QDialog):
         self.scatter_btn.clicked.connect(self.run_scatter)
         self.update_btn.clicked.connect(self.run_scatter)
 
-        #self.clear_btn.clicked.connect(self.logic.clear_last_scatter)
+        self.clear_btn.clicked.connect(self.logic.clear_last_scatter)
         self.bake_btn.clicked.connect(self.bake_instances)
 
     # Reusable code to handle Double Spin Boxes
