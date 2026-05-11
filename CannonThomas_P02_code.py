@@ -99,8 +99,6 @@ class ScatterToolLogic:
             cmds.rotate(rx, ry, rz, new_obj, absolute=True, worldSpace=True)
 
             if settings.align_to_normals:
-                # Starter behavior: keep Y random rotation, then try a simple normal alignment.
-                # You can upgrade this with maya.api.OpenMaya later.
                 self._try_align_to_surface_normal(new_obj, settings.target_mesh, point, ry)
 
             if group:
@@ -182,9 +180,7 @@ class ScatterToolLogic:
             nx, ny, nz = cmds.getAttr(cpm + ".normal")[0]
             cmds.delete(cpm)
 
-            # Approximate: convert normal direction to simple pitch/roll.
-            # This is not perfect, but gives a visual starting point.
-            import math
+         
             pitch = math.degrees(math.atan2(nz, ny))
             roll = -math.degrees(math.atan2(nx, ny))
             cmds.rotate(pitch, original_y_rotation, roll, obj, absolute=True, worldSpace=True)
