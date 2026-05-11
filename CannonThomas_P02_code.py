@@ -190,6 +190,14 @@ class ScatterToolLogic:
 
 # Collections of back-end routines
 # *******************************************
+
+# Return Maya's main window as a Qt widget
+def maya_main_window():
+    ptr = omui.MQtUtil.mainWindow()
+    if ptr is None:
+        return None
+    return wrapInstance(int(ptr), QtWidgets.QWidget)
+
 # Deletes an existing Maya UI window if it contains the same object name
 def delete_existing_window(object_name: str = WINDOW_OBJECT_NAME) -> None:
     for widget in QtWidgets.QApplication.allWidgets():
