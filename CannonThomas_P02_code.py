@@ -25,18 +25,89 @@ WINDOW_OBJECT_NAME = "ScatterTool"
 WINDOW_TITLE = "Scatter Tool for Maya"
 ROOT_GROUP_NAME = "ScatterTool_grp"
 
+
+# Collections of back-end routines
+# *******************************************
+# Deletes an existing Maya UI window if it contains the same object name
 def delete_existing_window(object_name: str = WINDOW_OBJECT_NAME) -> None:
-    """Delete an existing Maya UI window with the same object name."""
     for widget in QtWidgets.QApplication.allWidgets():
         if widget.objectName() == object_name:
             widget.close()
             widget.deleteLater()
 
-#  Main UI window and the heart of the program
+# Returns the selected transform nodes
+def get_selected_transforms() -> list[str]:
+    return cmds.ls(selection=True, type="transform") or []
+
+# Returns the first selected transform with a suitable mesh shape
+def get_first_selected_mesh() -> str | None:
+    selected = get_selected_transforms()
+    for obj in selected:
+        shapes = cmds.listRelatives(obj, shapes=True, fullPath=True) or []
+        if any(cmds.nodeType(shape) == "mesh" for shape in shapes):
+            return obj
+    return None
+
+# Checks whether a transform has a polygonal mesh shape
+def is_valid_mesh_transform(obj: str) -> bool:
+    if not obj or not cmds.objExists(obj):
+        return False
+    shapes = cmds.listRelatives(obj, shapes=True, fullPath=True) or []
+    return any(cmds.nodeType(shape) == "mesh" for shape in shapes)
+
+# Returns the first transformed mesh shape
+def get_mesh_shape(transform: str) -> str | None:
+    shapes = cmds.listRelatives(transform, shapes=True, fullPath=True) or []
+    for shape in shapes:
+        if cmds.nodeType(shape) == "mesh":
+            return shape
+    return None
+
+# Returns a unique node name suitable for Maya
+def unique_name(base_name: str) -> str:
+    if not cmds.objExists(base_name):
+        return base_name
+
+    index = 1
+    while cmds.objExists(f"{base_name}_{index:03d}"):
+        index += 1
+    return f"{base_name}_{index:03d}"
+
+# Returns a random float // safely handles reversed min/max values
+def random_float(min_value: float, max_value: float) -> float:
+    low = min(min_value, max_value)
+    high = max(min_value, max_value)
+    return random.uniform(low, high)
+
+# Chooses one object from a weighted source list
+def choose_weighted_object(objects: list[str], weights: list[float]) -> str:
+    if not objects:
+        raise ValueError("No source objects were provided.")
+
+    if not weights or len(weights) != len(objects):
+        return random.choice(objects)
+
+    clean_weights = [max(0.0, float(w)) for w in weights]
+    if sum(clean_weights) <= 0:
+        return random.choice(objects)
+
+    return random.choices(objects, weights=clean_weights, k=1)[0]
+
+# Returns Euclidean distance between two 3D points
+def distance_between_points(a, b) -> float:
+    return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2) ** 0.5
+
+# Shows a Maya warning
+def warn(message: str) -> None:
+    cmds.warning(message)
+
+
+
+# Main UI window and the heart of the program
+# *******************************************
 class ScatterToolUI(QtWidgets.QDialog):
      
     # Object constructor // initialization of the Scatter UI
-     
     def __init__(self, parent=None):
         super().__init__(parent or maya_main_window())
         self.setObjectName(WINDOW_OBJECT_NAME)
@@ -49,8 +120,7 @@ class ScatterToolUI(QtWidgets.QDialog):
         self._build_ui()
         self._connect_signals()
 
-    #  Creation of the UI elements // NO FUNCTIONALITY
-     
+    # Creating the UI elements // NO FUNCTIONALITY
     def _build_ui(self):
         main_layout = QtWidgets.QVBoxLayout(self)
         title = QtWidgets.QLabel("Scatter Tool")
@@ -65,8 +135,7 @@ class ScatterToolUI(QtWidgets.QDialog):
         scroll.setWidget(content)
         main_layout.addWidget(scroll)
         
-        # Defining the UI sections
-
+        # Defines the UI sections
         self.target_section()
         self.source_section()
         self.distribution_section()
@@ -74,8 +143,7 @@ class ScatterToolUI(QtWidgets.QDialog):
         self.alignment_section()
         self.advanced_section()
 
-        # Creating the acting buttons at the bottom of the UI
-
+        # Creates the acting buttons at the bottom of the UI
         button_layout = QtWidgets.QHBoxLayout()
         self.scatter_btn = QtWidgets.QPushButton("SCATTER")
         self.update_btn = QtWidgets.QPushButton("UPDATE")
@@ -85,8 +153,7 @@ class ScatterToolUI(QtWidgets.QDialog):
         self.scatter_btn.setMinimumHeight(34)
         self.scatter_btn.setStyleSheet("font-weight: bold;")
 
-        # Placing the acting buttons at the bottom of the UI
-
+        # Places the acting buttons at the bottom of the UI
         button_layout.addWidget(self.scatter_btn)
         button_layout.addWidget(self.update_btn)
         button_layout.addWidget(self.clear_btn)
@@ -94,8 +161,7 @@ class ScatterToolUI(QtWidgets.QDialog):
 
         main_layout.addLayout(button_layout)
 
-    # Creating the Target Section (1) and its layout
-
+    # Creates the Target Section (1) and its layout
     def target_section(self):
         box = QtWidgets.QGroupBox("1. Target Surface")
         layout = QtWidgets.QGridLayout(box)
@@ -112,8 +178,7 @@ class ScatterToolUI(QtWidgets.QDialog):
 
         self.content_layout.addWidget(box)
 
-    # Creating the Source Section (2) as a Table // Buttons implemented after Table
-
+    # Creates the Source Section (2) as a Table // Buttons implemented after Table
     def source_section(self):
         box = QtWidgets.QGroupBox("2. Source Objects")
         layout = QtWidgets.QVBoxLayout(box)
@@ -136,8 +201,7 @@ class ScatterToolUI(QtWidgets.QDialog):
 
         self.content_layout.addWidget(box)
 
-    # Creating the Distribution Modes (3) 
-
+    # Creates the Distribution Modes (3) 
     def distribution_section(self):
         box = QtWidgets.QGroupBox("3. Distribution Settings")
         layout = QtWidgets.QFormLayout(box)
@@ -165,8 +229,7 @@ class ScatterToolUI(QtWidgets.QDialog):
 
         self.content_layout.addWidget(box)
 
-    # Creating the Randomizaton Section (4)
-
+    # Creates the Randomizaton Section (4)
     def randomization_section(self):
         box = QtWidgets.QGroupBox("4. Randomization")
         layout = QtWidgets.QGridLayout(box)
@@ -206,8 +269,7 @@ class ScatterToolUI(QtWidgets.QDialog):
 
         self.content_layout.addWidget(box)
 
-    # Creating the Alignment Section (5)
-
+    # Creates the Alignment Section (5)
     def alignment_section(self):
         box = QtWidgets.QGroupBox("5. Surface Alignment")
         layout = QtWidgets.QVBoxLayout(box)
@@ -225,8 +287,7 @@ class ScatterToolUI(QtWidgets.QDialog):
 
         self.content_layout.addWidget(box)
 
-    # Creating the Advanced Section (6) 
-
+    # Creates the Advanced Section (6) 
     def advanced_section(self):
         box = QtWidgets.QGroupBox("6. Advanced")
         layout = QtWidgets.QFormLayout(box)
@@ -248,7 +309,6 @@ class ScatterToolUI(QtWidgets.QDialog):
         self.content_layout.addWidget(box)
 
     # Connects UI buttons to functions
-
     def _connect_signals(self):
         self.load_target_btn.clicked.connect(self.load_selected_target)
         self.add_source_btn.clicked.connect(self.add_selected_sources)
@@ -257,11 +317,10 @@ class ScatterToolUI(QtWidgets.QDialog):
         self.scatter_btn.clicked.connect(self.run_scatter)
         self.update_btn.clicked.connect(self.run_scatter)
 
-    #   self.clear_btn.clicked.connect(self.logic.clear_last_scatter)
+        #self.clear_btn.clicked.connect(self.logic.clear_last_scatter)
         self.bake_btn.clicked.connect(self.bake_instances)
 
     # Reusable code to handle Double Spin Boxes
-
     def _double_spin(self, min_value, max_value, value):
         spin = QtWidgets.QDoubleSpinBox()
         spin.setRange(min_value, max_value)
@@ -270,8 +329,7 @@ class ScatterToolUI(QtWidgets.QDialog):
         spin.setValue(value)
         return spin
      
-    # Load the selected mesh from Maya into the UI
-
+    # Loads the selected mesh from Maya into the UI
     def load_selected_target(self):
         mesh = get_first_selected_mesh()
         if not mesh:
@@ -282,7 +340,6 @@ class ScatterToolUI(QtWidgets.QDialog):
         self.target_status.setText("Valid mesh")
      
     # Loads the selected sources (mesh objects) if not loaded yet // Objects from Maya interface into the UI
-
     def add_selected_sources(self):
         selected = get_selected_transforms()
         target = self.target_field.text().strip()
@@ -297,14 +354,12 @@ class ScatterToolUI(QtWidgets.QDialog):
             self.source_table.setItem(row, 1, QtWidgets.QTableWidgetItem("1"))
      
     # Removes the selected rows from the source-object table
-     
     def remove_selected_source_rows(self):
         rows = sorted({index.row() for index in self.source_table.selectedIndexes()}, reverse=True)
         for row in rows:
             self.source_table.removeRow(row)
      
-    # Get the source objects (from the table) into a list
-
+    # Gets the source objects from the table into a list
     def _get_source_objects(self):
         objects = []
         for row in range(self.source_table.rowCount()):
@@ -313,8 +368,7 @@ class ScatterToolUI(QtWidgets.QDialog):
                 objects.append(item.text())
         return objects
 
-    # Get the source objects weights (from the table) into a list
-
+    # Gets the weights of the aforementioned source objects into a list
     def _get_source_weights(self):
         weights = []
         for row in range(self.source_table.rowCount()):
@@ -326,7 +380,6 @@ class ScatterToolUI(QtWidgets.QDialog):
         return weights
 
     # Gathers all the values from the UI and packages them into one clean settings object
-
     def collect_settings(self):
         target = self.target_field.text().strip()
         if not is_valid_mesh_transform(target):
@@ -353,8 +406,7 @@ class ScatterToolUI(QtWidgets.QDialog):
             group_name=self.group_name_field.text().strip() or "Scatter_Grp",
         )
 
-    # Execute the Scatter function on the target mesh
-
+    # Executes the Scatter function on the target mesh
     def run_scatter(self):
         try:
             settings = self.collect_settings()
@@ -368,8 +420,7 @@ class ScatterToolUI(QtWidgets.QDialog):
             cmds.warning(str(exc))
             print(traceback.format_exc())
 
-    # Convert the procedural scatter result into normal permanent Maya objects
-
+    # Converts the procedural scatter result into normal permanent Maya objects
     def bake_instances(self):
         """Placeholder: instances are already scene nodes; this is a future expansion point."""
         cmds.inViewMessage(amg="Bake placeholder: add conversion/export logic later.", pos="midCenter", fade=True)
