@@ -189,24 +189,73 @@ class ScatterToolLogic:
             return (px, py, pz)
         except Exception:
             return fallback
-    # Basic placeholder for normal alignment.
+
+    # Aligns the scattered object so its local Y axis follows the surface normal.
+    # This makes objects sit more naturally on sloped or uneven surfaces.
     def _try_align_to_surface_normal(self, obj: str, target_mesh: str, point, original_y_rotation: float) -> None:
         try:
-            shape = cmds.listRelatives(target_mesh, shapes=True, fullPath=True)[0]
+            shape = get_mesh_shape(target_mesh)
+            if not shape:
+                return
+
             cpm = cmds.createNode("closestPointOnMesh")
             cmds.connectAttr(shape + ".worldMesh[0]", cpm + ".inMesh", force=True)
             cmds.setAttr(cpm + ".inPosition", point[0], point[1], point[2], type="double3")
-            nx, ny, nz = cmds.getAttr(cpm + ".normal")[0]
+
+            normal = cmds.getAttr(cpm + ".normal")[0]
             cmds.delete(cpm)
 
-            pitch = math.degrees(math.atan2(nz, ny))
-            roll = -math.degrees(math.atan2(nx, ny))
-            cmds.rotate(pitch, original_y_rotation, roll, obj, absolute=True, worldSpace=True)
-        except Exception:
-            pass
+            nx, ny, nz = normal
+
+            # Create a temporary locator at the object position
+            locator = cmds.spaceLocator(name=unique_name("normal_align_locator"))[0]
+            cmds.xform(locator, worldSpace=True, translation=point)
+
+            # Aim the locator's local Y axis toward the surface normal
+            target = cmds.spaceLocator(name=unique_name("normal_align_target"))[0]
+            cmds.xform(
+                target,
+                worldSpace=True,
+                translation=(
+                    point[0] + nx,
+                    point[1] + ny,
+                    point[2] + nz
+                )
+            )
+
+            constraint = cmds.aimConstraint(
+                target,
+                locator,
+                aimVector=(0, 1, 0),
+                upVector=(0, 0, 1),
+                worldUpType="scene"
+            )[0]
+
+            cmds.delete(constraint)
+
+            # Preserve the random Y rotation by rotating around local Y
+            cmds.rotate(0, original_y_rotation, 0, locator, relative=True, objectSpace=True)
+
+            rotation = cmds.xform(locator, query=True, worldSpace=True, rotation=True)
+
+            cmds.rotate(
+                rotation[0],
+                rotation[1],
+                rotation[2],
+                obj,
+                absolute=True,
+                worldSpace=True
+            )
+
+            cmds.delete(locator, target)
+
+        except Exception as exc:
+            cmds.warning(f"Could not align object to surface normal: {exc}")
 
 
-# Collections of supporting routines
+
+
+# Collection of supporting routines
 # *******************************************
 
 # Return Maya's main window as a Qt widget.
