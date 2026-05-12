@@ -7,6 +7,7 @@
 
 import math  # Math Operations
 import random # For random properties
+import traceback # for debugging errors
 import maya.cmds as cmds 
 from dataclasses import dataclass
 
@@ -36,6 +37,7 @@ class ScatterSettings:
     target_mesh: str
     source_objects: list[str]
     source_weights: list[float]
+    distribution_mode: str = "Whole Mesh"
     count: int = 50
     min_spacing: float = 0.5
     seed: int = 12345
@@ -78,7 +80,24 @@ class ScatterToolLogic:
         while len(created_objects) < settings.count and attempts < max_attempts:
             attempts += 1
 
-            point = self._random_point_on_bbox_top_projection(settings.target_mesh, bbox)
+            #point = self._random_point_on_bbox_top_projection(settings.target_mesh, bbox)
+            if settings.distribution_mode == "Whole Mesh":
+                point = self._random_point_on_bbox_top_projection(settings.target_mesh, bbox)
+
+            elif settings.distribution_mode == "Selected Faces":
+                cmds.warning("Selected Faces mode is not implemented yet.")
+                return created_objects
+
+            elif settings.distribution_mode == "Vertex Based":
+                cmds.warning("Vertex Based mode is not implemented yet.")
+                return created_objects
+
+            elif settings.distribution_mode == "Curve Guided":
+                cmds.warning("Curve Guided mode is not implemented yet.")
+                return created_objects
+            else:
+                point = self._random_point_on_bbox_top_projection(settings.target_mesh, bbox)
+
             if point is None:
                 continue
 
@@ -180,7 +199,6 @@ class ScatterToolLogic:
             nx, ny, nz = cmds.getAttr(cpm + ".normal")[0]
             cmds.delete(cpm)
 
-         
             pitch = math.degrees(math.atan2(nz, ny))
             roll = -math.degrees(math.atan2(nx, ny))
             cmds.rotate(pitch, original_y_rotation, roll, obj, absolute=True, worldSpace=True)
@@ -188,15 +206,16 @@ class ScatterToolLogic:
             pass
 
 
-# Collections of back-end routines
+# Collections of supporting routines
 # *******************************************
 
-# Return Maya's main window as a Qt widget
+# Return Maya's main window as a Qt widget.
 def maya_main_window():
     ptr = omui.MQtUtil.mainWindow()
     if ptr is None:
         return None
     return wrapInstance(int(ptr), QtWidgets.QWidget)
+
 
 # Deletes an existing Maya UI window if it contains the same object name
 def delete_existing_window(object_name: str = WINDOW_OBJECT_NAME) -> None:
@@ -317,6 +336,8 @@ class ScatterToolUI(QtWidgets.QDialog):
         button_layout = QtWidgets.QHBoxLayout()
         self.scatter_btn = QtWidgets.QPushButton("SCATTER")
         self.update_btn = QtWidgets.QPushButton("UPDATE")
+        #self.update_btn.setEnabled(False)
+        #self.update_btn.setToolTip("Update feature not implemented yet.")
         self.clear_btn = QtWidgets.QPushButton("CLEAR")
         self.bake_btn = QtWidgets.QPushButton("BAKE")
 
@@ -485,7 +506,7 @@ class ScatterToolUI(QtWidgets.QDialog):
         self.remove_source_btn.clicked.connect(self.remove_selected_source_rows)
         self.clear_source_btn.clicked.connect(lambda: self.source_table.setRowCount(0))
         self.scatter_btn.clicked.connect(self.run_scatter)
-        self.update_btn.clicked.connect(self.run_scatter)
+        self.update_btn.clicked.connect(self.update_scatter)
 
         self.clear_btn.clicked.connect(self.logic.clear_last_scatter)
         self.bake_btn.clicked.connect(self.bake_instances)
@@ -559,6 +580,7 @@ class ScatterToolUI(QtWidgets.QDialog):
             target_mesh=target,
             source_objects=self._get_source_objects(),
             source_weights=self._get_source_weights(),
+            distribution_mode=self.mode_combo.currentText(),
             count=self.count_spin.value(),
             min_spacing=self.spacing_spin.value(),
             seed=self.seed_spin.value(),
@@ -589,6 +611,10 @@ class ScatterToolUI(QtWidgets.QDialog):
         except Exception as exc:
             cmds.warning(str(exc))
             print(traceback.format_exc())
+    # Replace previous scatter group 
+    def update_scatter(self):
+        self.logic.clear_last_scatter()
+        self.run_scatter()        
 
     # Converts the procedural scatter result into normal permanent Maya objects
     def bake_instances(self):
