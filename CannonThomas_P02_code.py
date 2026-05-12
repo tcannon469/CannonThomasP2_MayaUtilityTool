@@ -27,9 +27,7 @@ WINDOW_OBJECT_NAME = "ScatterTool"
 WINDOW_TITLE = "Scatter Tool for Maya"
 ROOT_GROUP_NAME = "ScatterTool_grp"
 
-
 # Scatter Logic Support
-# *******************************************
 
 # Default values, using a container class 
 @dataclass
@@ -190,8 +188,8 @@ class ScatterToolLogic:
         except Exception:
             return fallback
 
-    # Aligns the scattered object so its local Y axis follows the surface normal.
-    # This makes objects sit more naturally on sloped or uneven surfaces.
+    # Aligns the scattered object so its local Y axis follows the surface normal
+    # Makes objects sit more naturally on sloped or uneven surfaces, for more unruly planes
     def _try_align_to_surface_normal(self, obj: str, target_mesh: str, point, original_y_rotation: float) -> None:
         try:
             shape = get_mesh_shape(target_mesh)
@@ -252,11 +250,7 @@ class ScatterToolLogic:
         except Exception as exc:
             cmds.warning(f"Could not align object to surface normal: {exc}")
 
-
-
-
 # Collection of supporting routines
-# *******************************************
 
 # Return Maya's main window as a Qt widget.
 def maya_main_window():
@@ -264,7 +258,6 @@ def maya_main_window():
     if ptr is None:
         return None
     return wrapInstance(int(ptr), QtWidgets.QWidget)
-
 
 # Deletes an existing Maya UI window if it contains the same object name
 def delete_existing_window(object_name: str = WINDOW_OBJECT_NAME) -> None:
@@ -339,10 +332,7 @@ def distance_between_points(a, b) -> float:
 def warn(message: str) -> None:
     cmds.warning(message)
 
-
-
-# Main UI window and the heart of the program
-# *******************************************
+# Main UI window
 class ScatterToolUI(QtWidgets.QDialog):
      
     # Object constructor // initialization of the Scatter UI
@@ -662,7 +652,7 @@ class ScatterToolUI(QtWidgets.QDialog):
         except Exception as exc:
             cmds.warning(str(exc))
             print(traceback.format_exc())
-    # Replace previous scatter group 
+    # Replaces previous scatter groups
     def update_scatter(self):
         self.logic.clear_last_scatter()
         self.run_scatter()        
@@ -695,7 +685,6 @@ class ScatterToolUI(QtWidgets.QDialog):
             baked_objects.append(duplicate)
 
         baked_group = cmds.group(baked_objects,name=unique_name(group + "_Baked"))
-    
 
         cmds.select(baked_group)
 
@@ -704,7 +693,6 @@ class ScatterToolUI(QtWidgets.QDialog):
             pos="midCenter",
             fade=True
         )
-
 
 def show_window():
     delete_existing_window()
