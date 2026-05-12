@@ -31,7 +31,7 @@ if tool_path not in sys.path:
 
 import CannonThomas_P02_code
 importlib.reload(CannonThomas_P02_code)
-CannonThomas_P02_code.show()
+CannonThomas_P02_code.show_window()
 '''
 
     kwargs = {
