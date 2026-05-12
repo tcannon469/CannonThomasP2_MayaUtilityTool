@@ -618,8 +618,42 @@ class ScatterToolUI(QtWidgets.QDialog):
 
     # Converts the procedural scatter result into normal permanent Maya objects
     def bake_instances(self):
-        """Placeholder: instances are already scene nodes; this is a future expansion point."""
-        cmds.inViewMessage(amg="Bake placeholder: add conversion/export logic later.", pos="midCenter", fade=True)
+        #cmds.inViewMessage(amg="Bake placeholder: add conversion/export logic later.", pos="midCenter", fade=True)
+        group = self.logic.last_group
+        if not group or not cmds.objExists(group):
+            cmds.warning("No scatter group found to bake.")
+            return
+
+        children = cmds.listRelatives(group, children=True, fullPath=True) or []
+
+        baked_objects = []
+
+        for obj in children:
+            duplicate = cmds.duplicate(obj, renameChildren=True)[0]
+            # Optional cleanup
+            cmds.makeIdentity(
+                duplicate,
+                apply=True,
+                translate=True,
+                rotate=True,
+                scale=True
+            )
+
+            cmds.delete(duplicate, constructionHistory=True)
+
+            baked_objects.append(duplicate)
+
+        baked_group = cmds.group(baked_objects,name=unique_name(group + "_Baked"))
+    
+
+        cmds.select(baked_group)
+
+        cmds.inViewMessage(
+            amg=f"Baked <hl>{len(baked_objects)}</hl> objects.",
+            pos="midCenter",
+            fade=True
+        )
+
 
 def show_window():
     delete_existing_window()
