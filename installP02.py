@@ -20,7 +20,7 @@ def install_Button():
 
     g_shelf_top = mel_eval("$tmpVar=$gShelfTopLevel")
     current_shelf = cmds.tabLayout(g_shelf_top, query=True, selectTab=True)
-        
+
     command = f'''
 import sys
 import importlib
