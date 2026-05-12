@@ -9,7 +9,7 @@
 import os
 import maya.cmds as cmds
 
-TOOL_FOLDER = r"C:\Users\Mili\Downloads\CannonThomasP2_MayaUtilityTool"
+TOOL_FOLDER = r"PATH\CannonThomasP2_MayaUtilityTool"
 SCRIPT_FILE = os.path.join(TOOL_FOLDER, "CannonThomas_P02_code.py")
 ICON_FILE = os.path.join(TOOL_FOLDER,"icon.png")
 
