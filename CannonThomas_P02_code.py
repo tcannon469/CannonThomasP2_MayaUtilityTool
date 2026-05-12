@@ -351,7 +351,7 @@ class ScatterToolUI(QtWidgets.QDialog):
         self.setObjectName(WINDOW_OBJECT_NAME)
         self.setWindowTitle("Scatter Tool")
         self.setMinimumWidth(460)
-        self.setMinimumHeight(1250)
+        self.setMinimumHeight(800)
 
         self.logic = ScatterToolLogic()
         self.source_rows = [] # a table that host the objects to scatter
@@ -516,14 +516,15 @@ class ScatterToolUI(QtWidgets.QDialog):
 
         self.align_normals_cb = QtWidgets.QCheckBox("Align to Surface Normals")
         self.random_up_cb = QtWidgets.QCheckBox("Random Up Vector")
-        self.random_up_cb.setEnabled(False)
+        #self.random_up_cb.setEnabled(False)
+        self.random_up_cb.setVisible(False)
         self.max_slope_spin = self._double_spin(0.0, 90.0, 45.0)
-        self.max_slope_spin.setEnabled(False)
+        # self.max_slope_spin.setEnabled(False)
 
         layout.addWidget(self.align_normals_cb)
         layout.addWidget(self.random_up_cb)
-        layout.addWidget(QtWidgets.QLabel("Max Slope placeholder - not active yet"))
-        layout.addWidget(self.max_slope_spin)
+#        layout.addWidget(QtWidgets.QLabel("Max Slope placeholder - not active yet"))
+#        layout.addWidget(self.max_slope_spin)
 
         self.content_layout.addWidget(box)
 
@@ -537,13 +538,14 @@ class ScatterToolUI(QtWidgets.QDialog):
         self.group_cb = QtWidgets.QCheckBox("Group Results")
         self.group_cb.setChecked(True)
         self.live_preview_cb = QtWidgets.QCheckBox("Live Preview")
-        self.live_preview_cb.setEnabled(False)
+        # self.live_preview_cb.setEnabled(False)
+        self.live_preview_cb.setVisible(False)
 
         self.group_name_field = QtWidgets.QLineEdit("Scatter_Grp")
 
         layout.addRow(self.instance_cb)
         layout.addRow(self.group_cb)
-        layout.addRow(self.live_preview_cb)
+        #layout.addRow(self.live_preview_cb)
         layout.addRow("Group Name", self.group_name_field)
 
         self.content_layout.addWidget(box)
